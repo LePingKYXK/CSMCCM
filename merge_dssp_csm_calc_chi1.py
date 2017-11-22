@@ -24,7 +24,7 @@ CSMoutput_file = "output.txt"
 subunit_dict = {
 "chi1":r'N$|CA|CB|CG$|CG1$|OG$|OG1$|SG',
 "backbone":r'N$|CA|C$|O$",
-"Rama":r'C$|N$|CA|',#["C", "N", "CA", "C", "N"],
+"Rama":r'C$|N$|CA',#["C", "N", "CA", "C", "N"],
 'GLY':["N", "CA", "C", "O"],
 'ALA':["N", "CA", "C", "O", "CB"],
 'SER':["N", "CA", "C", "O", "CB", "OG"],
