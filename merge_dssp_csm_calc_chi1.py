@@ -198,7 +198,7 @@ def collect_dihedral_angles(coords_file, pdb_id, items, subunits, diAng):
     geom = geom[factor]
     
     #### filter 2nd round ####
-    if diAng in ['chi1', '']:
+    if diAng == 'chi1':
         geom = geom[geom.AtomTyp.shift(-1) != geom.AtomTyp]
         if geom['Seq_Num'].iloc[-1] != geom['Seq_Num'].iloc[-2]:
             geom = geom.iloc[:-1]
@@ -211,6 +211,7 @@ def collect_dihedral_angles(coords_file, pdb_id, items, subunits, diAng):
                        "Missing atom(s)!\n",
                        "\nPlease check the following file:\n{:}" ,
                        ''.join(("\n", "#" * 79, "\n"))))
+        print(fmt.format(coords_file))
         sys.exit(fmt.format(coords_file))
     
     #### chi1 is defined by the dihedral angle N-CA-CB-\wG|\wG1
@@ -223,7 +224,7 @@ def collect_dihedral_angles(coords_file, pdb_id, items, subunits, diAng):
     dihedral = pd.Series(dic)
     df_dihedral = geom.drop_duplicates(subset=['Seq_Num'], 
                                        keep='first')[cols].reset_index(drop=True)
-    df_dihedral["PDB_ID"] = pdb_id
+    df_dihedral["PDB_ID"] = pdb_id.upper()
     df_dihedral['Chi1'] = dic['Chi1']
     return df_dihedral
 
@@ -248,7 +249,7 @@ def collect_CsmCcm(path, CSMoutput_file, cols, PDB_ID):
             resname, seq_num, csm_value, chain = info[3:]
             data.append([resname, seq_num, csm_value, chain])
         df_CsmCcm = pd.DataFrame(data, columns=cols)
-        df_CsmCcm["PDB_ID"] = PDB_ID
+        df_CsmCcm["PDB_ID"] = PDB_ID.upper()
     return df_CsmCcm
 
 
@@ -313,7 +314,7 @@ def dssp_reader(path_dssp, dssp_file, PDB_ID):
         dssp = pd.DataFrame(dssp, columns=items)
         dssp.replace({'ResName': one_to_3code}, inplace=True)
         dssp.secStru.replace(' ', 'C', inplace=True)
-        dssp["PDB_ID"] = PDB_ID
+        dssp["PDB_ID"] = PDB_ID.upper()
         
         if np.any(dssp.ResName.str.islower()):
             dssp.ResName.replace(r'[a-z]+', 'CYS', regex=True, inplace=True)
@@ -368,15 +369,16 @@ def main(path_csm_results, structure_file, CSMoutput_file,
     for i, subdir in enumerate(subdirs):
         start_time = time.time()
         
-        PDB_ID = subdir.split(os.sep)[-2][4:8].upper()
+        PDB_ID = subdir.split(os.sep)[-2][4:8]
         
         print_fmt = ''.join((drawline, "No. {:}, file {:}"))
-        print(print_fmt.format(i + 1, PDB_ID))
+        print(print_fmt.format(i + 1, PDB_ID.upper()))
         
         coords_file = os.path.join(subdir, structure_file)
         
         #### processing only if file exist and not an empty file
         if os.path.isfile(coords_file) and os.stat(coords_file).st_size > 10:
+            
             #### deal with chi1 angles (dihedral angle N-CA-CB-\wG|\wG1)
             df_dihedral = collect_dihedral_angles(coords_file, PDB_ID, items,
                                                   subunits, angle)
@@ -400,15 +402,15 @@ def main(path_csm_results, structure_file, CSMoutput_file,
             
         else:
             print("The {:} Does NOT Exist!".format(coords_file))
-            empty_file.append(PDB_ID)
+            empty_file.append(PDB_ID.upper())
         
     print("\nThe Final Table is:\n", final_df)
     
-    outputf = ''.join(('Dihedral_CCM_', angle, '_', subunits, '.csv'))
+    outputf = ''.join(('Phi_Psi_CCM_', angle, '_', subunits, '.csv'))
     out_path_file = os.path.join(path_output, outputf)
     final_df.to_csv(out_path_file, sep=',', columns=title, index=False)
     fmt_save = ''.join((drawline, 
-                       "Merged file saved as:\n{}",
+                       "Merged file saved as:\n{:}",
                        drawline))
     print(fmt_save.format(out_path_file))
     
