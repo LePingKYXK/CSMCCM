@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 #import seaborn as sns
 #from matplotlib.colors import ListedColormap
 
-pstr = "\nPlease enter the directory contains PDB files: \n"
+pstr = "\nPlease enter the directory contains PDB files:\n"
 path = "D:\HUJI_data\Continuous_Symmetry\scripts"#input(pstr)
 #"D:\HUJI_data\Continuous_Symmetry\my_proteins\cleaned_my_PDB"
 
@@ -101,7 +101,7 @@ def pdb_reader(filename):
                 pass
         
     pdb_info = pd.DataFrame(pdb_info, columns=items)
-    pdb_info['Seq_Num'] = pdb_info['Seq_Num'].astype(int)
+    #pdb_info['Seq_Num'] = pdb_info['Seq_Num'].astype(int)
 
     #####################################################################
     #### locates the last 'TER' in the sequence.
@@ -138,44 +138,73 @@ def pdb_structure(string):
     return pdb
 
 
-def build_Ramachandran_array(dataframe):
+def check_missing_atoms(dataframe, drawline):
+    count = dataframe.Seq_Num.astype(int).value_counts()
+    x = dataframe[dataframe.Seq_Num.isin(count[count < 3].index)]
+    if not x.empty:
+        print(''.join((drawline,
+                       "Missing Atoms Found!:\n{:}",
+                       drawline)).format(x))
+
+            
+def build_Ramachandran_array(file, dataframe, drawline):
     ''' 
     '''
-    frame = (dataframe.AtomTyp == 'CA').sum() - 2
-    Ramachandran = np.empty((frame, 5, 3))
-    #print('shape shape shape\n{}\n===='.format(np.shape(Ramachandran)))    
-    """
-    #### using numpy 
-    i = 0
+    seq_diff = np.abs(np.diff(dataframe.Seq_Num.values.astype(int)))
     
-    array = dataframe.values
-    
-    for i in range(frame):
-        Ramachandran[i] = array[(2 + i*3):(2 + i*3)+5,-3:]
-    """
-    #### using pandas shift() 
-    df = dataframe.shift(-2)
-    i = 0    
-    while (not df.iloc[:5].isnull().values.any()) and i < frame - 1:
-        data = df.iloc[:5,-3:].values
-        Ramachandran[i] = data
-        df = df.shift(-3)
-        i += 1
-    
-    return np.array(Ramachandran, dtype=np.float64).reshape(-1,5,3)
+    if np.any(seq_diff > 1): # sequence gaps exist
+        #### report sequence gap(s)
+        print("\n==== Sequence Gap(s) Found! ====")
+        
+        gap_id = np.where(seq_diff > 1)[0]
+        gap_head = map(":".join,
+                       dataframe[["ChainID", "Seq_Num"]].values[gap_id])
+        gap_tail = map(":".join,
+                       dataframe[["ChainID", "Seq_Num"]].values[gap_id + 1])
+        gaps = list(zip(gap_head, gap_tail))
+        fmt_gap = ''.join(("\___/ {:} has sequence gap(s) \___/\n",
+                               "The sequence gaps are:",
+                               " {:}" * len(gaps), "\n"))
+        print(fmt_gap.format(file, *gaps))
 
-    ''' to do: for other subunit cuts, need to specify subunit names
+        #### deal with Ramachandran subunit in each segment (between the gaps)
+        seq_head = list(gap_id + 1)
+        seq_head.insert(0, 0)
+        seq_tail = list(gap_id + 1)
+        seq_tail.append(None)
+        segments = zip(seq_head, seq_tail)
+        Ramachandran = np.empty((1,5,3))
+        
+        for id_pair in segments:
+            df = dataframe.iloc[id_pair[0]:id_pair[1], :]
+            factor = df.AtomTyp.str.match(subunits_dict['Rama'])
+            df = df[factor].reset_index()
+            check_missing_atoms(df, drawline)
+            frame = (df.AtomTyp == 'CA').sum() - 2
+            
+            #### using numpy to build C(i-1)-N(i)-CA(i)-C(i)-N(i+1)
+            rama = np.empty((frame, 5, 3))
+            array = df.values
+            
+            for i in range(0,frame):
+                rama[i] = array[(2 + i * 3):(2 + i * 3) + 5, -3:]
+            Ramachandran = np.concatenate((Ramachandran, rama))
+        return np.array(Ramachandran[1:], dtype=np.float64)
     
-    elif subunit == 'backbone':
-        subunit_array = np.array(subunit_array).reshape(-1,4,3)
-        theta = subunit_array[:,]
-        return subunit_array, theta
-    
-    elif subunit in 'residue':
-        size = len(subunits_dict[subunit])
-        subunit_array = np.array(subunit_array).reshape(-1,size,3)
-    return subunit_array
-    '''
+    else: # the case no sequence gap
+        factor = dataframe.AtomTyp.str.match(subunits_dict['Rama'])
+        dataframe = dataframe[factor].reset_index()
+        check_missing_atoms(dataframe, drawline)
+        frame = (dataframe.AtomTyp == 'CA').sum() - 2
+        
+        #### using numpy to build C(i-1)-N(i)-CA(i)-C(i)-N(i+1)
+        Ramachandran = np.empty((frame, 5, 3))
+        array = dataframe.values
+        
+        for i in range(0,frame):
+            Ramachandran[i] = array[(2 + i * 3):(2 + i * 3) + 5, -3:]
+        return np.array(Ramachandran, dtype=np.float64)
+
 
 def calc_dihedral_angles(coordinates):
     ''' Using the Gram–Schmidt process to calculate the dihedral_angle
@@ -212,12 +241,13 @@ def calc_dihedral_angles(coordinates):
     return np.rad2deg(np.arctan2(y, x))
 
 
-def plot_rama(phi, psi):
+def plot_rama(phi, psi, filename):
     """Function to plot two one-dimensional arrays"""
     
     fig = plt.figure(figsize=(7,7))
     ax = fig.add_subplot(111)
-    #fig.subplots_adjust(top=0.9, bottom=0.1 ,left=0.1, right=0.9)
+    fig.subplots_adjust(top=0.9, bottom=0.15 ,left=0.2, right=0.95)
+    ax.linewith=10
     ax.set_title('The Ramachandran Plot', fontsize=20)
     ax.tick_params(axis='x', labelsize=18)
     ax.tick_params(axis='y', labelsize=18)
@@ -232,12 +262,13 @@ def plot_rama(phi, psi):
     ax.annotate('', xy=(0,-180), xytext=(0, 180),
                 arrowprops={'arrowstyle': '-', 'ls': 'dashed'})
     ax.scatter(phi, psi)
-    ax.plot(phi, psi, '.')
+    ax.plot(phi, psi, '.', label=filename)
+    ax.legend([filename], loc='best')
+    figname = '_'.join((filename, 'rama.png'))
+    fig.savefig(os.path.join(path, figname), dpi=600) # Saves figures
     plt.show()
-    #fig.set_size_inches(7.0, 8.0) # Changes figure size
-    #fig.savefig('rama.png', dpi=600) # Saves figures
-    
-    
+
+
 def main(path):
     '''
     '''
@@ -255,49 +286,46 @@ def main(path):
     
     pdbfiles = find_PDB_files(path)
     error_file = []
+    
     for i, f in enumerate(pdbfiles):
         start_time = time.time()
         
         fmt_head = ''.join((drawline, "No.{:>5d},\tPDB ID:{:>5s}"))
         print(fmt_head.format(i + 1, f[:4].upper()))
         
-        # Call function to read PDB file
+        #### Call function to read PDB file
         filename = os.path.join(path, f)
         pdb_info = pdb_reader(filename)[cols]
+
+        #### Call function to build Ramachandran subunits
+        try:
+            Ramachandran = build_Ramachandran_array(f, pdb_info, drawline)
         
-        # pick the Ramachandran subunit (no seq_gap case)
-        factor = pdb_info.AtomTyp.str.match(subunits_dict['Rama'])
-        pdb_info = pdb_info[factor].reset_index()
-        #print("==== filter 1st round ====:\n", pdb_info)
-        count = pdb_info.Seq_Num.value_counts()
-        x = pdb_info[pdb_info.Seq_Num.isin(count[count < 3].index)]
-        print("Count the Seq_Num:\n", x)
-        #try:
-        Ramachandran = build_Ramachandran_array(pdb_info)
-        #except ValueError:
-        #    print(''.join((drawline,
-        #                   "The {} might have problem!",
-        #                   drawline)).format(f))
-        #    error_file.append(f)
-            #pass
-        
+        except ValueError:
+            print(''.join((drawline,
+                           "The {} might have problem!",
+                           drawline)).format(f))
+            error_file.append(f)
+
         steptime = time.time() - start_time
         print(fmt_step.format(steptime))
         
-        # Call function to plot torsion angles
+        #### Call function to plot torsion angles
         phi_coord = Ramachandran[:,:4,:]
         psi_coord = Ramachandran[:,1:,:]
         
-        # Call function to calculate torsion angles
+        #### Call function to calculate torsion angles
         phi = calc_dihedral_angles(phi_coord)
         psi = calc_dihedral_angles(psi_coord)
-        plot_rama(phi, psi)
+        plot_rama(phi, psi, f[:4].upper())
         
-    print(''.join((drawline, "The following files have problem!\n",
-                   "{}\n" * len(error_file),
-                   drawline)).format(*error_file))
-    error_file = pd.DataFrame(error_file)
-    error_file.to_csv(os.path.join(path,"error_file.csv"), sep=',', index=False)
+    if error_file:
+        print(''.join((drawline, "The following files have problem!\n",
+                       "{}\n" * len(error_file),
+                       drawline)).format(*error_file))
+        error_file = pd.DataFrame(error_file)
+        ef = os.path.join(path,"error_file.csv")
+        error_file.to_csv(ef, sep=',', index=False)
     
     total_time = time.time() - initial_time
     fmt_end = "{:}Works Completed! Total Time: {:.4f} Seconds.\n"
