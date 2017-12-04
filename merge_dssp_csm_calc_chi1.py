@@ -113,11 +113,10 @@ def pdb_structure(string):
     return pdb
 
 
-def read_initial_coordinates(filename, items, method, length):
-    '''
-    
-    * length is the length of the number of lines in CSM/CCM output data, which 
-    provides the maximum size of the data array.
+def read_initial_coordinates(filename, items, method):
+    ''' This function reads the "initial_normalized_coordinates.pdb" file and 
+    checks whether the number of coordinates lines match the number of atoms
+    of the subunit. If match, collect the coordinates; if not, omit them.
     '''
     if method == "Rama":
         number = 5
@@ -181,8 +180,7 @@ def calc_dihedral_angles(coordinates):
     return np.rad2deg(np.arctan2(y, x))
 
 
-def collect_dihedral_angles(coords_file, pdb_id, items, method,
-                            subunit, length, diAng):
+def collect_dihedral_angles(coords_file, pdb_id, items, method, subunit, diAng):
     ''' This function collects the coordinates of the subunit in the
     "initial_normalized_coordinates.pdb" files from the PDBSlicer ouptut
     folders.
@@ -218,7 +216,7 @@ def collect_dihedral_angles(coords_file, pdb_id, items, method,
     coords_list = ["Coord_X", "Coord_Y", "Coord_Z"]
     cols = ['ResName', 'Seq_Num', 'ChainID']
     
-    geom = read_initial_coordinates(coords_file, items, method, length)
+    geom = read_initial_coordinates(coords_file, items, method)
     
     if not geom.empty:
         #### filter 1st round ####
@@ -414,12 +412,11 @@ def main(path_csm_results, structure_file, CSMoutput_file,
 
             #### deal with ccm values (output.txt from PDBSlicer)
             df_CsmCcms = collect_CsmCcm(subdir, CSMoutput_file, cols, PDB_ID)
-            l = len(df_CsmCcms.index)
             #print("df_CsmCcms is:\n{:}\n".format(df_CsmCcms))
             
             #### deal with chi1 angles (dihedral angle N-CA-CB-\wG|\wG1)
             df_dihedral = collect_dihedral_angles(coords_file, PDB_ID, items,
-                                                  method, subunit, l, angle)
+                                                  method, subunit, angle)
             #print("df_dihedral is:\n{:}\n".format(df_dihedral))
             
             #### deal with dssp file (Phi, Psi, secondary structures)
