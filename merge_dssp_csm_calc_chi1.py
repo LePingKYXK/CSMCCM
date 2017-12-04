@@ -9,7 +9,7 @@ from functools import reduce
 path_str1 = "\nPlease Enter the Directory Contains the PDBSlicer Result Files:\n"
 path_str2 = "\nPlease Enter the Directory Contains the dssp files:\n"
 path_str3 = "\nPlease Enter the Output Directory:\n"
-methodstr = "\nPlease Enter the Cutting Methods: (e.g. Ramachandran, backbone, RamafullRes, RamaSideChain)\n"
+methodstr = "\nPlease Enter the Cutting Methods: (e.g. Ramachandran, backbone, RamaFullRes, RamaSideChain)\n"
 codes_str = "\nPlease Enter The Residue Name (3-letter code) or subunit:\n"
 angle_str = "\nPlease Enter The Angle Name (e.g. chi1, NCCO(backbone), etc.):\n"
 
@@ -122,9 +122,10 @@ def read_initial_coordinates(filename, items, method):
         number = 5
     elif method == "backbone":
         number = 4
-    elif method in ('RamafullRes', 'RamaSideChain') and subunit.upper() in subunit_dict.keys():
+    elif method == 'RamaFullRes' and subunit.upper() in subunit_dict.keys():
         number = len(subunit_dict[subunit]) + 2
-        
+    elif method == 'RamaSideChain' and subunit.upper() in subunit_dict.keys():
+        number = len(subunit_dict[subunit]) + 1
     data = []
     
     with open(filename, 'r') as fo:
@@ -219,41 +220,44 @@ def collect_dihedral_angles(coords_file, pdb_id, items, method, subunit, diAng):
     geom = read_initial_coordinates(coords_file, items, method)
     
     if not geom.empty:
-        #### filter 1st round ####
         geom = geom[title]
-        factor = (geom.AtomTyp.str.match(atoms)) & (geom.ResName == subunit)
-        geom = geom[factor]
-    
-        #### filter 2nd round ####
-        if diAng == 'chi1':
+
+        try:
+            #### filtering the atoms within the dihedral angle ####
+            factor = (geom.AtomTyp.str.match(atoms)) & (geom.ResName == subunit)
+            geom = geom[factor]
+            
+            #### ignoring the atoms repeated in the adjancent subunit ####
             geom = geom[geom.AtomTyp.shift(-1) != geom.AtomTyp]
             if geom['Seq_Num'].iloc[-1] != geom['Seq_Num'].iloc[-2]:
                 geom = geom.iloc[:-1]
-            #print("\n----- 2nd filter ----\n{}\n".format(geom))
-        
-        try:
+                
             xyz = geom[coords_list].values.reshape(-1,4,3)
-        except ValueError:
-            fmt = ''.join((''.join(("\n", "#" * 79, "\n")),
-                           "Missing atom(s)!\n",
-                           "\nPlease check the following file:\n{:}" ,
-                           ''.join(("\n", "#" * 79, "\n"))))
-            print(fmt.format(coords_file))
-            sys.exit(fmt.format(coords_file))
-        
-        #### chi1 is defined by the dihedral angle N-CA-CB-\wG|\wG1
-        dihedral = calc_dihedral_angles(xyz)
-        
-        dic = {}
-        key, value = 'Chi1', dihedral
-        dic.setdefault(key, value)
-        
-        dihedral = pd.Series(dic)
-        df_dihedral = geom.drop_duplicates(subset=['Seq_Num'], 
-                                           keep='first')[cols].reset_index(drop=True)
+            
+            #### chi1 is defined by the dihedral angle N-CA-CB-\wG|\wG1
+            dihedral = calc_dihedral_angles(xyz)
+            
+            dic = {}
+            key, value = 'Chi1', dihedral
+            dic.setdefault(key, value)
+            
+            dihedral = pd.Series(dic)
+            df_dihedral = geom.drop_duplicates(subset=['Seq_Num'], 
+                                               keep='first')[cols].reset_index(drop=True)
+            df_dihedral['Chi1'] = dic['Chi1']
+                        
+        except:
+            geom = geom[geom.ResName == subunit]
+            geom = geom[geom.AtomTyp.shift(-1) != geom.AtomTyp]
+            if geom['Seq_Num'].iloc[-1] != geom['Seq_Num'].iloc[-2]:
+                geom = geom.iloc[:-1]
+            df_dihedral = geom.drop_duplicates(subset=['Seq_Num'], 
+                                               keep='first')[cols].reset_index(drop=True)
+            df_dihedral['Chi1'] = np.nan
+            
         df_dihedral["PDB_ID"] = pdb_id.upper()
-        df_dihedral['Chi1'] = dic['Chi1']
         return df_dihedral
+    
     else:
         return pd.DataFrame()
 
