@@ -10,13 +10,13 @@ path_str1 = "\nPlease Enter the Directory Contains the PDBSlicer Result Files:\n
 path_str2 = "\nPlease Enter the Directory Contains the dssp files:\n"
 path_str3 = "\nPlease Enter the Output Directory:\n"
 methodstr = "\nPlease Enter the Cutting Methods: (e.g. Ramachandran, backbone, RamaFullRes, RamaSideChain)\n"
-codes_str = "\nPlease Enter The Residue Name (3-letter code) or subunit:\n"
+codes_str = "\nPlease Enter The Residue Name (3-letter code, e.g. GLY) or prePRO_ResName (e.g. prePRO_ARG):\n"
 angle_str = "\nPlease Enter The Angle Name (e.g. chi1, NCCO(backbone), etc.):\n"
 
 path_csm_results = input(path_str1)
 path_dssp = input(path_str2)
 method = input(methodstr)
-subunit = input(codes_str)
+residue = input(codes_str)
 angle = input(angle_str)
 path_output = input(path_str3)
 structure_file = "initial_normalized_coordinates.pdb"
@@ -113,19 +113,19 @@ def pdb_structure(string):
     return pdb
 
 
-def read_initial_coordinates(filename, items, method):
+def read_initial_coordinates(filename, items, method, res):
     ''' This function reads the "initial_normalized_coordinates.pdb" file and 
     checks whether the number of coordinates lines match the number of atoms
-    of the subunit. If match, collect the coordinates; if not, omit them.
+    of the residue. If match, collect the coordinates; if not, omit them.
     '''
     if method == "Rama":
         number = 5
     elif method == "backbone":
         number = 4
-    elif method == 'RamaFullRes' and subunit.upper() in subunit_dict.keys():
-        number = len(subunit_dict[subunit]) + 2
-    elif method == 'RamaSideChain' and subunit.upper() in subunit_dict.keys():
-        number = len(subunit_dict[subunit]) + 1
+    elif method == 'RamaFullRes' and res.upper() in subunit_dict.keys():
+        number = len(subunit_dict[res.upper()]) + 2
+    elif method == 'RamaSideChain' and res.upper() in subunit_dict.keys():
+        number = len(subunit_dict[res.upper()]) + 1
     data = []
     
     with open(filename, 'r') as fo:
@@ -181,10 +181,13 @@ def calc_dihedral_angles(coordinates):
     return np.rad2deg(np.arctan2(y, x))
 
 
-def collect_dihedral_angles(coords_file, pdb_id, items, method, subunit, diAng):
+def collect_dihedral_angles(coords_file, pdb_id, items, method, res, diAng):
     ''' This function collects the coordinates of the subunit in the
     "initial_normalized_coordinates.pdb" files from the PDBSlicer ouptut
     folders.
+    
+    -- res is the 3-letter code of the residue.
+    -- diAng is the dihedral angle, chi1.
     
         Since Ramachandran subunit cross 3-adjacent residues, additionally,
     some of the adjacent residues could be the same.
@@ -217,17 +220,17 @@ def collect_dihedral_angles(coords_file, pdb_id, items, method, subunit, diAng):
     coords_list = ["Coord_X", "Coord_Y", "Coord_Z"]
     cols = ['ResName', 'Seq_Num', 'ChainID']
     
-    geom = read_initial_coordinates(coords_file, items, method)
+    geom = read_initial_coordinates(coords_file, items, method, res)
     
     if not geom.empty:
         geom = geom[title]
 
         try:
             #### filtering the atoms within the dihedral angle ####
-            factor = (geom.AtomTyp.str.match(atoms)) & (geom.ResName == subunit)
+            factor = (geom.AtomTyp.str.match(atoms)) & (geom.ResName == res)
             geom = geom[factor]
             
-            #### ignoring the atoms repeated in the adjancent subunit ####
+            #### ignoring the atoms repeated in the adjancent residues ####
             geom = geom[geom.AtomTyp.shift(-1) != geom.AtomTyp]
             if geom['Seq_Num'].iloc[-1] != geom['Seq_Num'].iloc[-2]:
                 geom = geom.iloc[:-1]
@@ -249,7 +252,7 @@ def collect_dihedral_angles(coords_file, pdb_id, items, method, subunit, diAng):
             df_dihedral['Chi1'] = dic['Chi1']
             
         except:
-            geom = geom[geom.ResName == subunit]
+            geom = geom[geom.ResName == res]
             geom = geom[geom.AtomTyp.shift(-1) != geom.AtomTyp]
             if geom['Seq_Num'].iloc[-1] != geom['Seq_Num'].iloc[-2]:
                 geom = geom.iloc[:-1]
@@ -377,7 +380,7 @@ def merge_tables(df_dihedral, df_CsmCcms, df_dssp, title):
 
 
 def main(path_csm_results, structure_file, CSMoutput_file, 
-         path_dssp, method, subunits, angle, path_output):
+         path_dssp, method, residue, angle, path_output):
     ''' Workflow:
     Find all subdirectories in the given path;
     if "initial_coordinates.pdb" file exist and not empty, do the following
@@ -385,7 +388,7 @@ def main(path_csm_results, structure_file, CSMoutput_file,
     
       - read the coordinates of the subunits in "initial_coordinates.pdb" file;
 
-      - calculate the dihedral angles of the subunits (here is chi1);
+      - calculate the dihedral angle (here is chi1);
 
       - read the CCM/CSM values in the corresponding output file;
 
@@ -424,7 +427,7 @@ def main(path_csm_results, structure_file, CSMoutput_file,
             
             #### deal with chi1 angles (dihedral angle N-CA-CB-\wG|\wG1)
             df_dihedral = collect_dihedral_angles(coords_file, PDB_ID, items,
-                                                  method, subunit, angle)
+                                                  method, residue[-3:], angle)
             #print("df_dihedral is:\n{:}\n".format(df_dihedral))
             
             #### deal with dssp file (Phi, Psi, secondary structures)
@@ -445,7 +448,7 @@ def main(path_csm_results, structure_file, CSMoutput_file,
         
     print("\nThe Final Table is:\n", final_df)
     
-    outputf = ''.join(('Phi_Psi_CCM_', angle, '_', method, '_', "prePRO", '_', subunit, '.csv'))
+    outputf = ''.join(('Phi_Psi_CCM_', angle, '_', method, '_', residue, '.csv'))
     out_path_file = os.path.join(path_output, outputf)
     final_df.to_csv(out_path_file, sep=',', columns=title, index=False)
     fmt_save = ''.join((drawline, 
@@ -459,7 +462,7 @@ def main(path_csm_results, structure_file, CSMoutput_file,
                             "{:<6}" * len(empty_file), 
                             drawline))
         print(fmt_none.format(*empty_file))
-        nonfile = ''.join(('non-existent', '_', subunit, '.txt'))
+        nonfile = ''.join(('non-existent', '_', residue, '.txt'))
         none_path_file = os.path.join(path_output, nonfile)
         with open(none_path_file, 'w') as fw:
             fw.write(fmt_none.format(*empty_file))
@@ -473,4 +476,4 @@ def main(path_csm_results, structure_file, CSMoutput_file,
   
 if __name__ == "__main__":
     main(path_csm_results, structure_file, CSMoutput_file, 
-         path_dssp, method, subunit, angle, path_output)
+         path_dssp, method, residue, angle, path_output)
