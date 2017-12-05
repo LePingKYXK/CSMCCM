@@ -231,8 +231,10 @@ def collect_dihedral_angles(coords_file, pdb_id, items, method, subunit, diAng):
             geom = geom[geom.AtomTyp.shift(-1) != geom.AtomTyp]
             if geom['Seq_Num'].iloc[-1] != geom['Seq_Num'].iloc[-2]:
                 geom = geom.iloc[:-1]
-                
-            xyz = geom[coords_list].values.reshape(-1,4,3)
+            
+            frame = geom.AtomTyp[geom.AtomTyp == "CA"].count()
+            
+            xyz = geom[coords_list].values.reshape(frame,4,3)
             
             #### chi1 is defined by the dihedral angle N-CA-CB-\wG|\wG1
             dihedral = calc_dihedral_angles(xyz)
@@ -245,7 +247,7 @@ def collect_dihedral_angles(coords_file, pdb_id, items, method, subunit, diAng):
             df_dihedral = geom.drop_duplicates(subset=['Seq_Num'], 
                                                keep='first')[cols].reset_index(drop=True)
             df_dihedral['Chi1'] = dic['Chi1']
-                        
+            
         except:
             geom = geom[geom.ResName == subunit]
             geom = geom[geom.AtomTyp.shift(-1) != geom.AtomTyp]
@@ -345,6 +347,8 @@ def dssp_reader(path_dssp, dssp_file, PDB_ID):
             info = dssp_format(line)
             dssp.append(info)
         dssp = pd.DataFrame(dssp, columns=items)
+        dssp = dssp[(dssp.Phi != '360.0') & (dssp.Psi != '360.0')]
+        dssp = dssp[(~dssp.ResName.isin(['!', 'X'])) & (dssp.Breaker != '*')]
         dssp.replace({'ResName': one_to_3code}, inplace=True)
         dssp.secStru.replace(' ', 'C', inplace=True)
         dssp["PDB_ID"] = PDB_ID.upper()
@@ -441,7 +445,7 @@ def main(path_csm_results, structure_file, CSMoutput_file,
         
     print("\nThe Final Table is:\n", final_df)
     
-    outputf = ''.join(('Phi_Psi_CCM_', angle, '_', subunit, '.csv'))
+    outputf = ''.join(('Phi_Psi_CCM_', angle, '_', method, '_', "prePRO", '_', subunit, '.csv'))
     out_path_file = os.path.join(path_output, outputf)
     final_df.to_csv(out_path_file, sep=',', columns=title, index=False)
     fmt_save = ''.join((drawline, 
