@@ -2,21 +2,18 @@
 """
 Created on Wed Nov 22 11:04:46 2017
 
-@author: wangh
+@author: Huan Wang
 """
 
 import numpy as np
 import pandas as pd
 import os, time
 import matplotlib.pyplot as plt
-#import seaborn as sns
-#from matplotlib.colors import ListedColormap
+
 
 pstr = "\nPlease enter the directory contains PDB files:\n"
-path = "D:\HUJI_data\Continuous_Symmetry\scripts"#input(pstr)
-#"D:\HUJI_data\Continuous_Symmetry\my_proteins\cleaned_my_PDB"
+path = input(pstr)
 
-#subunit = "THR"
 
 subunits_dict = {
 "chi1":r'N$|CA|CB|CG$|CG1$|OG$|OG1$|SG',
@@ -74,30 +71,18 @@ def pdb_reader(filename):
         for line in fo:
             if line.startswith("REMARK 465"):
                 pass
-
-            elif line.startswith("SEQRES"):
-                pass
-
+            
             elif line.startswith("MODEL"):
                 pass
             
             elif line.startswith("ENDMDL"):
                 pass
             
-            elif line.startswith("ATOM") or \
-                 line.startswith("HETATM") or \
-                 line.startswith("TER"):
-
+            elif line.startswith(("ATOM", "HETATM", "TER")):
                 info = pdb_structure(line)
                 pdb_info.append(info)
                 
-            elif line.startswith("SIGATM"):
-                pass
-            
-            elif line.startswith("ANISOU"):
-                pass
-            
-            elif line.startswith("SIGUIJ"):
+            elif line.startswith(("SEQRES", "SIGATM", "ANISOU", "SIGUIJ")):
                 pass
         
     pdb_info = pd.DataFrame(pdb_info, columns=items)
